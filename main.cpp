@@ -25,7 +25,6 @@ bool lost = true;
 bool glitch = true;
 bool servosEnabled = true;
 uint32_t photogram = 1;
-uint8_t servoSpeed = 60;
 int rollServoSpeed = ROLL_SERVO_SPEED;
 int pitchServoSpeed = PITCH_SERVO_SPEED;
 int rollServoDelay = ROLL_SERVO_DELAY;
@@ -147,6 +146,11 @@ int main(int argc, char* argv[]) {
         // Update estimated servo values
         rollStatusServo.update(lastPhotogramSpentTime);
         pitchStatusServo.update(lastPhotogramSpentTime);
+        
+        if (rollStatusServo.inBigStep() || pitchStatusServo.inBigStep()) {
+            sem_wait(&semCam);
+            continue;
+        }
        
         // Update estimated camera roll and pitch
         roll = droneRoll + rollStatusServo.getEstimatedAngle();

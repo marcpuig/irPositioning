@@ -33,41 +33,112 @@ extern Servo rollStatusServo;
 extern Servo pitchStatusServo;
 
 unsigned long int lostTime = HOME_SERVOS_ON_LOST_DELAY;
-BeaconGroup * lockedWaypoint = NULL;
+BeaconGroup * trackedWaypoint = NULL;   // Waypoint being tracked by the camera
 SignalVector<Vector3<float>> delayedPositionSignal(20, 100000);
 Vector3<float> filteredPosition;
 long int oldMicros = 0;
 locationT lastKnownLocation = { 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0, 0.f, 0.f };
 
 
-void updateServos() {
-    static float servoRoll = 0;
-    static float servoPitch = 0;
+void updateServos(float heading, Vector3<float> position) {
+    static short positionReadings = 0;
+    Vector3<float> position2D;
+    position2D.x = position.x;
+    position2D.y = position.y;
+    position2D.z = 0;
     
-    // Get waypoint position in the image
-    Vector2<int> imageCentroid = vImg2air(lockedWaypoint->getImageCentroid());
-    //printf("0-> imageCentroid: (%d, %d)\n", imageCentroid.x, imageCentroid.y);
-
-    // Get estimated servo position
-    float estimatedServoRoll = rollStatusServo.getEstimatedAngle();
-    float estimatedServoPitch = pitchStatusServo.getEstimatedAngle();
     
-    float desiredServoRoll = rollStatusServo.getDesiredAngle();
-    float desiredServoPitch = pitchStatusServo.getDesiredAngle();
+    // Search closest waypoint
+    BeaconGroup * closestWaypoint;
+    float minDistance = INFINITY;
+    for (unsigned int waypointIndex = 0; \
+        waypointIndex < nominalContainer.getNumBeaconGroups(); waypointIndex++) {
+                
+        BeaconGroup * waypoint = &nominalContainer.getBeaconGroup(waypointIndex);
+    
+        if (!waypoint->isLocked())
+            continue;
+                
+        Vector3<float> waypointPosition = waypoint->getCentroid();
+        waypointPosition.z = 0;
+            
+        float distance = (waypointPosition - position2D).abs();
+                
+        if (distance < minDistance) {
+            minDistance = distance;
+            closestWaypoint = waypoint;
+        }
+    }
+    Vector3<float> trackedCentroid = trackedWaypoint->getCentroid();
+    trackedCentroid.z = 0;
+    float oldMinDistance = (trackedCentroid - position2D).abs();
+    
+    // Need to change the waypoint tracked?
+    if (minDistance + SWITCH_WAYPOINT_MARGIN < oldMinDistance) {
+        printf("Changing from W%d to W%d\t%f, %f\n", trackedWaypoint->getId(), closestWaypoint->getId(), minDistance, oldMinDistance);
+        trackedWaypoint = closestWaypoint;
+    }
         
-    //printf("1-> estimatedServoRoll: %f, desiredServoRoll: %f\n", estimatedServoRoll, desiredServoRoll);
+    float newServoPitch;
+    float newServoRoll;
     
-    // Get desired servo angles
-    float newServoRoll = -FOV_ROLL_D / PIXELS_X * imageCentroid.x + estimatedServoRoll;
-    float newServoPitch = FOV_PITCH_D / PIXELS_Y * imageCentroid.y + estimatedServoPitch;
+    if (trackedWaypoint->isPositioned()) {
+        
+        // Get waypoint position in the image
+        Vector2<int> imageCentroid = vImg2air(trackedWaypoint->getImageCentroid());
+
+        // Get estimated servo position
+        float estimatedServoRoll = rollStatusServo.getEstimatedAngle();
+        float estimatedServoPitch = pitchStatusServo.getEstimatedAngle();
+        
+        float desiredServoRoll = rollStatusServo.getDesiredAngle();
+        float desiredServoPitch = pitchStatusServo.getDesiredAngle();
+        
+        // Get desired servo angles
+        newServoRoll = -FOV_ROLL_D / PIXELS_X * imageCentroid.x + estimatedServoRoll;
+        newServoPitch = FOV_PITCH_D / PIXELS_Y * imageCentroid.y + estimatedServoPitch;
+ 
+        ////printf("%d;%d \t E: %f \t D: %f \t N: %f\n", imageCentroid.x, imageCentroid.y, \
+            estimatedServoPitch, desiredServoPitch, newServoPitch);
+        
+    }
+    else {
+        
+        // Roll && Pitch
+        float headingRollAxe = heading / RAD2DEG;
+        float headingPitchAxe = fmod(heading + 90, 360) / RAD2DEG;
+
+        Vector2<float> e1Roll(sin(headingRollAxe), cos(headingRollAxe));
+        Vector2<float> e1Pitch(sin(headingPitchAxe), cos(headingPitchAxe));
+        
+        Vector3<float> closestWaypointPosition = trackedWaypoint->getCentroid();
+        
+        // 2D Vector from closest waypoint to the drone
+        Vector2<float> e2(position.x - closestWaypointPosition.x, \
+            position.y - closestWaypointPosition.y);
+        
+        double valRoll = e1Roll.dot(e2);
+        double valPitch = e1Pitch.dot(e2);
+        
+        Vector3<float> pRoll(valRoll * e1Roll.x, valRoll * e1Roll.y, 0);
+        Vector3<float> pPitch(valPitch * e1Pitch.x, valPitch * e1Pitch.y, 0);
+        
+        Vector3<float> e2GroundProj(e2.x, e2.y, 0);
+        
+        newServoRoll = atan2((pRoll - e2GroundProj).abs(), position.z) * RAD2DEG;
+        newServoPitch = -atan2((pPitch - e2GroundProj).abs(), position.z) * RAD2DEG;
+        
+        // sign
+        if (e2.dot(e1Roll) < 0) newServoPitch = -newServoPitch;
+        if (e2.dot(e1Pitch) < 0) newServoRoll = -newServoRoll;
+        
+        newServoRoll -= droneRoll;
+        newServoPitch -= dronePitch;
+        printf("(big jump)\n");
+    }
     
-    servoRoll = servoRoll * .8f + newServoRoll * .2f;
-    servoPitch = servoPitch * .8f + newServoPitch * .2f;
-    
-    rollStatusServo.setDesiredAngle(servoRoll);
-    pitchStatusServo.setDesiredAngle(servoPitch);
-    
-    //printf("2-> x: %d, updated desiredServoRoll: %5f\n\n", imageCentroid.x, servoRoll);
+    rollStatusServo.setDesiredAngle(newServoRoll);
+    pitchStatusServo.setDesiredAngle(newServoPitch);
 }
 
 void computePosition() {
@@ -94,6 +165,8 @@ void computePosition() {
     std::ostringstream stringStream, beaconString;
     
     if (num_waypoints > 0) {
+        BeaconGroup * lockedWaypoint;    // Waypoint used for the positioning
+        
         if (num_waypoints > 1) {
             
             // Get fixed waypoint closer to the master waypoint in number of jumps
@@ -150,102 +223,17 @@ void computePosition() {
             }
             else {
                 TRACET(DEBUG, DCP, "ReliableBeaconGroup not found!\n");
+                return;
             }
 
-            // Search closest waypoint
-            float minDistance = INFINITY;
-            Vector3<float> closestWaypointPosition;
-            BeaconGroup * closestWaypoint;
-            Vector3<float> position2D;
-            
-            if (lockedWaypoint == NULL)
+            if (trackedWaypoint == NULL || !trackedWaypoint->isPositioned())
                 lockedWaypoint = &reliableBeaconGroup->getWaypoint();
-            
-            position2D.x = lockedWaypoint->getPosition().x;
-            position2D.y = lockedWaypoint->getPosition().y;
-            position2D.z = 0;
-            
-            for (unsigned int waypointIndex = 0; \
-                waypointIndex < nominalContainer.getNumBeaconGroups(); waypointIndex++) {
-                
-                BeaconGroup * waypoint = &nominalContainer.getBeaconGroup(waypointIndex);
-                if (!waypoint->isLocked())
-                    continue;
-                
-                Vector3<float> waypointPosition = waypoint->getCentroid();
-                waypointPosition.z = 0;
-            
-                float distance = (waypointPosition - position2D).abs();
-                
-                if(lockedWaypoint == waypoint)
-                    distance -= SWITCH_WAYPOINT_MARGIN;
-                
-                if (distance < minDistance) {
-                    minDistance = distance;
-                    closestWaypointPosition = waypointPosition;
-                    closestWaypoint = waypoint;
-                }
-            }
-            if (lockedWaypoint != closestWaypoint) {
-                TRACE(NOTICE, "Changing locked waypoint to %d\n", closestWaypoint->getId());
-                lockedWaypoint = closestWaypoint;
-            }
+            else
+                lockedWaypoint = trackedWaypoint;
             
             position = lockedWaypoint->getPosition();
             heading = lockedWaypoint->getHeading();
         
-            // Improve altitude and heading using waypoint distance
-            /*float distance = 0;
-            float nominalDistance = 0;
-            xHeading = 0;
-            yHeading = 0;
-            for (int beaconGroupIndexA = 0; beaconGroupIndexA < \
-                beaconContainer->getNumBeaconGroups(); beaconGroupIndexA++) {
-                
-                BeaconGroup& beaconGroupA = \
-                    beaconContainer->getBeaconGroup(beaconGroupIndexA);
-            
-                if (beaconGroupA.isPositioned()) {
-                    BeaconGroup& waypointA = beaconGroupA.getWaypoint();
-                    
-                    for (int beaconGroupIndexB = beaconGroupIndexA + 1; \
-                        beaconGroupIndexB < beaconContainer->getNumBeaconGroups(); \
-                        beaconGroupIndexB++) {
-                        
-                        BeaconGroup& beaconGroupB = \
-                            beaconContainer->getBeaconGroup(beaconGroupIndexB);
-                    
-                        if (beaconGroupB.isPositioned()) {
-                            BeaconGroup& waypointB = beaconGroupB.getWaypoint();
-                            
-                            // Distance
-                            distance += (beaconGroupA.getCentroid() - \
-                                beaconGroupB.getCentroid()).abs();
-                            nominalDistance += (waypointA.getCentroid() - \
-                                waypointB.getCentroid()).abs();
-                            
-                            // Heading
-                            Vector3<float> atobActual = beaconGroupB.getCentroid() - \
-                                beaconGroupA.getCentroid();
-                            float angleActual = atan2(atobActual.y, atobActual.x);
-                            
-                            Vector3<float> atobNominal = \
-                                beaconGroupB.getWaypoint().getCentroid() - \
-                                beaconGroupA.getWaypoint().getCentroid();
-                            float angleNominal = atan2(atobNominal.y, atobNominal.x);
-                            
-                            float tempHeading = angleActual - angleNominal;
-                            xHeading += cos(tempHeading);
-                            yHeading += sin(tempHeading);
-                        }
-                    }
-                }
-            }
-            position.z = nominalDistance / distance;
-            heading = atan2(yHeading / num_waypoints, \
-                xHeading / num_waypoints) * RAD2DEG;
-            if (heading < 0)
-                heading += 360;*/
         }
         else {
             // If only one waypoint found use its determined position and heading
@@ -263,6 +251,8 @@ void computePosition() {
             }
         }
         
+        if (trackedWaypoint == NULL)
+            trackedWaypoint = lockedWaypoint;
         
         float cyaw = correctAngle(droneYaw);
         
@@ -303,7 +293,7 @@ void computePosition() {
         pitch = dronePitch + pitchStatusServo.getEstimatedAngle();
         
         if (servosEnabled)
-            updateServos();
+            updateServos(heading, position);
         else {
             rollStatusServo.setDesiredAngle(0);
             pitchStatusServo.setDesiredAngle(0);
@@ -373,6 +363,7 @@ void computePosition() {
         if (lostTime >= HOME_SERVOS_ON_LOST_DELAY) {
             rollStatusServo.setDesiredAngle(0);
             pitchStatusServo.setDesiredAngle(0);
+            trackedWaypoint = NULL;
         }
         else {
             rollStatusServo.setDesiredAngle(rollStatusServo.getDesiredAngle());
@@ -397,8 +388,6 @@ void computePosition() {
         location.servoRoll = rollStatusServo.getPWM();
         location.servoPitch = pitchStatusServo.getPWM();        
     }
-    
-    //printf("RESULT: servoRoll: %d, droneRoll: %f, servoPitch: %d, dronePitch: %d\n", location.servoRoll, droneRoll, location.servoPitch, dronePitch);
     
     location.desiredx = desiredx;
     location.desiredy = desiredy;

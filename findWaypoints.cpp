@@ -11,6 +11,12 @@ void findWaypoints() {
     STARTCHRONO
     TRACET(DEBUG, DFW, "\nfindWaypoints()------------------------\n");
     
+    // Unset positioned flags in the waypoints
+    for (unsigned int waypointIndex = 0; waypointIndex < nominalContainer.getNumBeaconGroups(); waypointIndex++) {
+        BeaconGroup & waypoint = nominalContainer.getBeaconGroup(waypointIndex);
+        waypoint.setPositioned(false);
+    }
+    
     // For each beacon group found
     for (int beaconGroupIndex = 0; beaconGroupIndex < beaconContainer->getNumBeaconGroups(); beaconGroupIndex++) {
         BeaconGroup & beaconGroup = beaconContainer->getBeaconGroup(beaconGroupIndex);
@@ -27,7 +33,7 @@ void findWaypoints() {
             BeaconGroup & waypoint = nominalContainer.getBeaconGroup(waypointIndex);
             
             TRACET(DEBUG, DFW, " Comparing beaconGroup %d to waypoint %d\n", beaconGroup.getId(), waypoint.getId());
-
+            
             // Check beacon number
             if (beaconNumber != waypoint.getNumBeacons()) {
                 TRACET(DEBUG, DFW, "    Beacon number missmatch, skipping waypoint\n");

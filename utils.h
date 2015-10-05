@@ -143,7 +143,9 @@ public:
         desiredAngle(0),\
         pwm_range(pwm_range),\
         range(range),\
-        offset(offset) {
+        offset(offset), \
+        bigStep(false), \
+        postBigStep(false) {
             
         oldMicros = getMicroSec();
         signal = new SignalVector<float>(25, delay);
@@ -163,6 +165,15 @@ public:
     void setPWMRange(int value) { pwm_range = value; }
     void setRange(float value) { range = value; }
     void setOffset(float value) { offset = value; }
+    bool inBigStep() {
+        if (bigStep)
+            printf("In big step: D: %f, E: %f\n", desiredAngle, estimatedAngle);
+        else if (postBigStep)
+            printf("In POST big step: D: %f, E: %f\n", desiredAngle, estimatedAngle);
+        
+        return bigStep || postBigStep;
+        
+    }
     
     // Updates the estimated servo position
     void update(long int spentTime) {
@@ -179,7 +190,21 @@ public:
             estimatedAngle -= spentTime * speed; 
             if (estimatedAngle < receivedServoAngle)
                 estimatedAngle = receivedServoAngle;
-        }   
+        }
+        
+        bool newStep = abs(desiredAngle - estimatedAngle) > 6.;
+        
+        // Step start
+        if (!bigStep && newStep)
+            bigStep = true;
+        // Step end switch to post big step status
+        else if (bigStep && !newStep) {
+            postBigStep = 2;
+            bigStep = false;
+        }
+        // In post big step
+        else if (postBigStep > 0)
+            postBigStep--;
     }
     int getPWM() {
         // Obtain PWM value to send to the servos
@@ -204,5 +229,7 @@ private:
     float offset;
     float range;
     SignalVector <float> *signal;
+    bool bigStep;
+    short postBigStep;
 };
 

@@ -44,21 +44,21 @@
 #define ANGLE_OFFSET_TO_RELOC 1
 #define YAW_OFFSET_DIVIDER 10
 #define HIST_SIZE 10
-#define SWITCH_WAYPOINT_MARGIN 0.15
+#define SWITCH_WAYPOINT_MARGIN 0.075
 #define ATTITUDE_DELAY 37000
 //#define THUMBNAIL
 
 // Camera servos
-#define ROLL_SERVO_SPEED 500  // deg/s
-#define PITCH_SERVO_SPEED 500 // deg/s
-#define ROLL_SERVO_DELAY 104000 // us
-#define PITCH_SERVO_DELAY 104000 // us
+#define ROLL_SERVO_SPEED 220 // 500  // deg/s
+#define PITCH_SERVO_SPEED 220 // 500 // deg/s
+#define ROLL_SERVO_DELAY 60000 // us
+#define PITCH_SERVO_DELAY 60000 // us
 #define PWM_MID 1500
 #define ROLL_PWM_RANGE 500
 #define PITCH_PWM_RANGE 500
-#define ROLL_RANGE 42.50
-#define PITCH_RANGE 50.00
-#define ROLL_OFFSET -5.5f
+#define ROLL_RANGE 53.00
+#define PITCH_RANGE 53.00
+#define ROLL_OFFSET -7.7f
 #define PITCH_OFFSET 2.3f
 #define HOME_SERVOS_ON_LOST_DELAY 2500000
 

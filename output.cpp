@@ -12,7 +12,6 @@
 #include "IPC/IPC.h"
 
 extern bool servosEnabled;
-extern uint8_t servoSpeed;
 extern Servo rollStatusServo;
 extern Servo pitchStatusServo;
 extern SignalVector<attitudeT> attitudeSignal;
@@ -144,10 +143,10 @@ static int callback_dumb_increment(struct libwebsocket_context * context,
           servosEnabled = true;
       else if (len > 0 && (*(char*)in) == 'd')
           servosEnabled = false;
-      else if (len > 0 && (*(char*)in) == 's') {
+      /*else if (len > 0 && (*(char*)in) == 's') {
           servoSpeed = ((*((char*)in + 1)) - 48) * 10 + (*((char*)in + 2)) - 48;
           TRACE(NOTICE, "SERVO SPEED CHANGED: %d\n", servoSpeed);
-      }
+      }*/
       else if (len > 0 && (*(char*)in) == 'm') {
           int speed = ((*((char*)in + 1) - 48) * 10 + *((char*)in + 2) - 48) * 10;
           
@@ -173,13 +172,13 @@ static int callback_dumb_increment(struct libwebsocket_context * context,
           TRACE(NOTICE, "PITCH RESPONSE DELAY CHANGED: %d\n", value);
       }
       else if (len > 0 && (*(char*)in) == 'v') {
-          int value = ((*((char*)in + 1) - 48) * 10 + *((char*)in + 2) - 48) * 1000;
+          int value = ((*((char*)in + 1) - 48) * 10 + *((char*)in + 2) - 48);
           rollStatusServo.setRange(value);
           
           TRACE(NOTICE, "ROLL RANGE CHANGED: %d\n", value);
       }
       else if (len > 0 && (*(char*)in) == 'w') {
-          int value = ((*((char*)in + 1) - 48) * 10 + *((char*)in + 2) - 48) * 1000;
+          int value = ((*((char*)in + 1) - 48) * 10 + *((char*)in + 2) - 48);
           pitchStatusServo.setRange(value);
           
           TRACE(NOTICE, "PITCH RANGE CHANGED: %d\n", value);
