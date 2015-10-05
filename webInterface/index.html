@@ -1,0 +1,422 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+  <title>Projecte</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  
+  <link rel="stylesheet" href="css/jquery.mobile-1.4.5.min.css">
+  
+  <script src="js/jquery-1.11.0.min.js"></script>
+  <script src="js/jquery.mobile-1.4.5.min.js"></script>
+  <script src="js/jquery.flot.min.js"></script>
+  <script src="js/pixi.min.js"></script>
+  <script src="js/three.min.js"></script>
+  <script src="js/OrbitControls.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/helvetiker_regular.typeface.js"></script>
+  
+  <style>
+  body {
+    overflow: hidden;
+  }
+  
+  .ui-content {
+    padding: 0 !important;
+    overflow: hidden;
+  }
+  
+  div#status {
+    position: absolute;
+    width: 200px;
+    right: 40px;
+    top: 0;
+    vertical-align: middle;
+    text-align: right;
+    
+    font-size: 1em;
+    min-height: 1.1em;
+    display: block;
+    margin: 0;
+    padding: .7em 0;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    outline: 0!important;
+  }
+  
+  div#statusIcon {
+    position: absolute;
+    right: 4px;
+    top: 4px;
+    display: inline-block;
+    width: 32px;
+    height: 32px;
+  }
+  
+  .disconnected {  background-image: url("img/disconnected.png"); }
+  .connected { background-image: url("img/connected.png"); }
+  .positioned { background-image: url("img/positioned.png"); }
+  
+  /******************
+  /*** CAMERA TAB ***
+  /******************/
+  div#camera {
+    display: none;
+    background-color: #444444;
+  }
+  
+  div#pixi {
+    position: relative;
+    padding: 6px 0;
+  }
+  
+  /******************
+  /*** CONFIG TAB ***
+  /******************/
+  div#config {
+    font-family:Monospace;
+    font-size: 1.4em;
+    display: none;
+    position: relative;
+  }
+  
+  div#config .col {
+    width: 48%;
+    display: inline-block;
+  }
+  
+  div#config .col .colContainer {
+  padding: 6px;
+  }
+  
+  /*****************
+  /*** DEBUG TAB ***
+  /*****************/
+  div#debug {
+    font-family:Monospace;
+    font-size: 1.4em;
+    display: none;
+    position: relative;
+  }
+  
+  div#debug div#leftPane {
+    width: 300px;
+    margin-left: 6px;
+  }
+  
+  div#debug table#varTable{
+    display: inline-block;
+    padding: 6px;
+    width: 100%;
+  }
+  
+  div#debug table#varTable tr td {
+    text-align: right;
+  }
+  
+  div#debug table#varTable tr td[colspan="3"] {
+    text-align: center;
+    font-weight: bold;
+  }
+  
+  div#debug table#varTable span {
+    display: inline-block;
+    min-width: 70px;
+  }
+  
+  div#graph {
+    position: absolute;
+    left: 0px;
+    top: 6px;
+    margin-left: 316px;
+    display: inline-block;
+  }
+  
+  div#log {
+    background-color: rgba(200,200,200,0.3);
+    position: fixed;
+    top: 125px;
+    right: 10px;
+  }
+  
+  div#recordedDataContainer {
+    background-color: rgba(200,200,200,1);
+    position: fixed;
+    top: 125px;
+    right: 10px;
+    display: none;
+    overflow-y: scroll;
+  }
+  
+  div.controlsContainer {
+    font-size: 75%;
+  }
+  
+  button#enableServos, button#disableServos, button#applyPosition, #startNavigation, #stopNavigation {
+    width: 120px;
+    display: inline-block;
+  }
+  button#showData {
+    margin-top: 10px;
+    padding: 6px 2px;
+  }
+  div#debug div.ui-slider {
+    padding: 6px 2px;
+  }
+  
+  div#recordControls {
+    height: 200px;
+    position: absolute;
+    top: 5px;
+    right: 15px;
+  }
+  
+  div#positionColl div.ui-input-text { width: 70px !important; display: inline-block }
+  
+  /*input.ui-slider-input {
+    display : none !important;
+  }*/
+  
+  .ui-slider-track.ui-mini {
+    margin-left: 5em !important;
+  }  
+  
+  </style>
+</head>
+<body>
+<div data-role="page">
+    <div data-role="header">
+        <h1 id="headerTitle">Infrared beacon positioning system</h1>
+        <div data-role="navbar" data-iconpos="left">
+            <ul>
+                <li>
+                    <a id="select3d" data-icon="location" class="ui-btn-active">3D</a>
+                </li>
+                <li>
+                    <a id="selectCamera" data-icon="video">Camera</a>
+                </li>
+                <li>
+                    <a id="selectDebug" data-icon="grid">Debug</a>
+                </li>
+                <li>
+                    <a id="selectConfig" data-icon="gear">Config</a>
+                </li>
+            </ul>
+        </div>
+        <div id="status">Status:</div>
+        <div id="statusIcon" class="disconnected"></div>
+    </div>
+
+    <div data-role="content">
+        <div class="tab" id="3dViewport"></div>
+        <div class="tab" id="camera">
+            <div id="pixi"></div>
+        </div>
+        <div class="tab" id="debug">
+            <div id="leftPane">
+                <div id="tableContainer">
+                    <table id="varTable">
+                    <tbody>
+                        <tr><td colspan=3>Packages</td></tr>
+                        <tr><td>fix:</td><td><span id="loc_p">0</span></td><td></td></tr>
+                        <tr><td>lost:</td><td><span id="noloc_p">0</span></td><td></td></tr>
+                        
+                        <tr><td colspan=3>Variables</td></tr>
+                        <tr>
+                            <td>roll:</td>
+                            <td><span id="roll"></span></td>
+                            <td><input type="checkbox" var="0" data-mini="true" checked=1></td>
+                        </tr>
+                        <tr>
+                            <td>pitch:</td>
+                            <td><span id="pitch"></span></td>
+                            <td><input type="checkbox" var="1" data-mini="true" checked=1></td>
+                        </tr>
+                        <tr>
+                            <td>drRoll:</td>
+                            <td><span id="droneRoll"></span></td>
+                            <td><input type="checkbox" var="2" data-mini="true"></td>
+                        </tr>
+                        <tr>
+                            <td>drPitch:</td>
+                            <td><span id="dronePitch"></span></td>
+                            <td><input type="checkbox" var="3" data-mini="true"></td>
+                        </tr>
+                        <tr>
+                            <td>servoRoll:</td>
+                            <td><span id="servoRoll"></span></td>
+                            <td><input type="checkbox" var="4" data-mini="true"></td>
+                        </tr>
+                        <tr>
+                            <td>servoPitch:</td>
+                            <td><span id="servoPitch"></span></td>
+                            <td><input type="checkbox" var="5" data-mini="true"></td>
+                        </tr>
+                        <tr>
+                            <td>heading:</td>
+                            <td><span id="heading"></span></td>
+                            <td><input type="checkbox" var="6" data-mini="true"></td>
+                        </tr>
+                        <tr>
+                            <td>waypoints:</td>
+                            <td><span id="waypoints">0</span></td>
+                            <td><input type="checkbox" var="7" data-mini="true"></td>
+                        </tr>
+                        <tr>
+                            <td>x:</td>
+                            <td><span id="x"></span></td>
+                            <td><input type="checkbox" var="8" data-mini="true"></td>
+                        </tr>
+                        <tr>
+                            <td>y:</td>
+                            <td><span id="y"></span></td>
+                            <td><input type="checkbox" var="9" data-mini="true"></td>
+                        </tr>
+                        <tr>
+                            <td>z:</td>
+                            <td><span id="z"></span></td>
+                            <td><input type="checkbox" var="10" data-mini="true"></td>
+                        </tr>
+                        <tr>
+                            <td>speed:</td>
+                            <td><span id="speed"></span></td>
+                            <td><input type="checkbox" var="11" data-mini="true"></td>
+                        </tr>
+                        <tr>
+                            <td>gspeed:</td>
+                            <td><span id="gspeed"></span></td>
+                            <td><input type="checkbox" var="12" data-mini="true"></td>
+                        </tr>
+                        <tr>
+                            <td>xspeed:</td>
+                            <td><span id="xspeed"></span></td>
+                            <td><input type="checkbox" var="13" data-mini="true"></td>
+                        </tr>
+                        <tr>
+                            <td>yspeed:</td>
+                            <td><span id="yspeed"></span></td>
+                            <td><input type="checkbox" var="14" data-mini="true"></td>
+                        </tr>
+                        <tr>
+                            <td>zspeed:</td>
+                            <td><span id="zspeed"></span></td>
+                            <td><input type="checkbox" var="15" data-mini="true"></td>
+                        </tr>
+                    </tbody>
+                    </table>
+                    
+                    <!--<button id="showData" data-icon="bars">Recorded Data</button>-->
+                    <div id="recordDiv" style="display:none">
+                        <button id="startRecordingFile" data-icon="carat-r">Start Recording</button>
+                        <button id="stopRecordingFile" data-icon="forbidden">Stop Recording</button>
+                    
+                        <form onsubmit="download()">
+                            <input type="submit" value="Download">
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div id="graph"></div>
+            <div id="log"></div>
+            <div id="recordedDataContainer">
+                <div id="recordedData">
+                </div>
+                <div id="recordControls">
+                    <button id="selectData" data-mini="true" 
+                        data-icon="forward">Select</button>
+                    <button id="clearData" data-mini="true"
+                        data-icon="delete">Clean</button>
+                    <button id="stopRecording" data-mini="true" 
+                        data-icon="forbidden">Stop Recording</button>
+                    <button id="startRecording" data-mini="true" 
+                        data-icon="carat-r">Start Recording</button>
+                </div>
+            </div>
+        </div>
+        <div class="tab" id="config">
+            <div class="col">
+                <div class="colContainer">
+                    <div class="controlsContainer" data-role="collapsible">
+                        <h4>Servos</h4>
+                        <div class="col">
+                            <div class="colContainer">
+                                <button id="enableServos" data-icon="power">Enable</button>
+                                <button id="disableServos" data-icon="forbidden">Disable</button><br />
+                                Speed reduction:<br />
+                                <input type="range" id="servoSpeed" value="60"
+                                    min="0" max="99" data-highlight="true" data-mini="true" />
+                                Roll speed: [10*deg/s]<br />
+                                <input type="range" id="maxServoRollSpeed" value="22"
+                                    min="0" max="99" data-highlight="true" data-mini="true" />
+                                Pitch speed: [10*deg/s]<br />
+                                <input type="range" id="maxServoPitchSpeed" value="22"
+                                    min="0" max="99" data-highlight="true" data-mini="true" />
+                                Roll servo delay: [ms]<br />
+                                <input type="range" id="rollServoDelay" value="60"
+                                    min="0" max="99" data-highlight="true" data-mini="true" />
+                                Pitch servo delay: [ms]<br />
+                                <input type="range" id="pitchServoDelay" value="60"
+                                    min="0" max="99" data-highlight="true" data-mini="true" />
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="colContainer">
+                                Roll range: [deg/2]<br />
+                                <input type="range" id="rollServoRange" value="53"
+                                    min="0" max="99" data-highlight="true" data-mini="true" />
+                                Pitch range: [deg/2]<br />
+                                <input type="range" id="pitchServoRange" value="53"
+                                    min="0" max="99" data-highlight="true" data-mini="true" />
+                                Roll offset: [deg/10]<br />
+                                <input type="range" id="rollServoOffset" value="-77"
+                                    min="-499" max="499" data-highlight="true" data-mini="true" />
+                                Pitch offset: [deg/10]<br />
+                                <input type="range" id="pitchServoOffset" value="23"
+                                    min="-499" max="499" data-highlight="true" data-mini="true" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="controlsContainer" data-role="collapsible" id="positionColl">
+                        <h4>Position</h4>
+                        Actual position:<br/>
+                        X: <input type="number" id="actualX" value="0" data-mini="true" />
+                        Y: <input type="number" id="actualY" value="0" data-mini="true" />
+                        &nbsp;[cm] &nbsp;
+                        <button id="applyPosition" data-icon="carat-r">Apply</button><br />
+                        Navigation:<br/>
+                        X: <input class="navCoor" type="number" point="1" coor="x" value="-30" data-mini="true" />
+                        Y: <input class="navCoor" type="number" point="1" coor="y" value="-30" data-mini="true" /> <br />
+                        X: <input class="navCoor" type="number" point="2" coor="x" value="-30" data-mini="true" />
+                        Y: <input class="navCoor" type="number" point="2" coor="y" value="30" data-mini="true" /> <br />
+                        X: <input class="navCoor" type="number" point="3" coor="x" value="30" data-mini="true" />
+                        Y: <input class="navCoor" type="number" point="3" coor="y" value="30" data-mini="true" /> <br />
+                        X: <input class="navCoor" type="number" point="4" coor="x" value="30" data-mini="true" />
+                        Y: <input class="navCoor" type="number" point="4" coor="y" value="-30" data-mini="true" /> <br />
+                        Seconds: <input id="navSeconds" class="navCoor" type="number" value="5" data-mini="true" /> <br />
+                        <button id="startNavigation" data-icon="carat-r">Start</button> &nbsp; 
+                        <button id="stopNavigation" data-icon="delete">Stop</button>
+                    </div>
+                    <div class="controlsContainer" data-role="collapsible">
+                        <h4>Other</h4>
+                        Attitude delay:<br/>
+                        <input type="range" id="attitudeDelay" value="37"
+                            min="0" max="99" data-highlight="true" data-mini="true" />
+                    </div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="colContainer">
+                </div>
+            </div>
+            <div class="col">
+                <div class="colContainer">
+                </div>
+            </div>
+        
+        </div>
+    </div>
+    
+</div>
+</body>
+</html>
